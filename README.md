@@ -1,5 +1,5 @@
 # lightshot-data-miner
- I had a random idea to make a data miner for lightshot a while back. Today a friend brought it to my attention that folks are now mining Lightshot images for valuable information etc...here is a proof of concept! This script bruteforces for valid prnt.sc urls and for images containing human faces/text then saves the images containing them along with basic.
+ I had a random idea to make a data miner for lightshot a while back. Today a friend brought it to my attention that folks are now mining Lightshot images for valuable information etc...here is a proof of concept! This script bruteforces for valid prnt.sc urls and for images containing human faces/text then saves the images.
 
 - Install [Tesseract-OCR](https://github.com/tesseract-ocr/tessdoc)
 

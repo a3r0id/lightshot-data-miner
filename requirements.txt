@@ -1,0 +1,5 @@
+user_agent==0.1.9
+requests==2.25.1
+face_recognition==1.3.0
+Pillow==8.2.0
+pytesseract==0.3.7

@@ -1,16 +1,15 @@
 from requests import get
-from string import ascii_lowercase
 from random import choice
-from user_agent import generate_navigator
 import pytesseract as tess
-tess.pytesseract.tesseract_cmd = "C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
 from PIL import Image
-from os import remove, getcwd
-import threading
+from user_agent import generate_navigator
+from string import ascii_lowercase
 from json import dump, dumps, loads
-import face_recognition
+from os import remove, getcwd
 from datetime import datetime
+import face_recognition
 from time import sleep
+import threading
 
 oof_backup = """{
     "good": [],
@@ -19,13 +18,15 @@ oof_backup = """{
 }
 """
 
+tess.pytesseract.tesseract_cmd = "C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
+
 class images:
     found            = []
     processed        = 0
     success          = 0
 
 class config:
-    process_threads  = 10
+    process_threads  = 4
     request_threads  = round(process_threads / 4)
 
 class proxies:
@@ -34,8 +35,7 @@ class proxies:
     proxies          = {}
     T_INDEX          = 0
 
-T_LOCK               = threading.Lock()   
-
+T_LOCK               = threading.Lock()  
 
 class Proxies(object):
     def __init__(self) -> None:
@@ -160,7 +160,7 @@ def updateProxies():
         print("[api.proxyscrape.com] [Status: %s]" % (r.status_code))
         exit(1)
 
-    threads      = []
+    threads = []
 
     for _ in range(10):
         threads.append(threading.Thread(target=proxyTestWorker))
@@ -183,10 +183,7 @@ def getBestProxy():
             print("WATING FOR GOOD PROXY...")
             continue
     
-        proxy_list = proxies.proxies.get()['good']
-
-        print("GETTING BEST PROX:")
-        print(proxy_list)
+        proxy_list   = proxies.proxies.get()['good']
 
         fastestProxy = min([proxy['elapsed_time'] for proxy in proxy_list])
         
@@ -238,14 +235,14 @@ def process_image_worker():
         print("[IMAGE PROCCESSING] Starting Image: %s" % fname)
 
         try:
-            re = get(job['url'], stream=True, allow_redirects=True, headers=headers, proxies=bestProx, timeout=4.9)
+            re   = get(job['url'], stream=True, allow_redirects=True, headers=headers, proxies=bestProx, timeout=4.9)
         except:
             print("[Image Proccessing] Worker Request Timed Out! [Proxy: %s]" % bestProx['http'])
             continue
 
         if re.status_code == 403:
 
-            p_obj = proxies.proxies.proxies.get()
+            p_obj         = proxies.proxies.get()
             nuGoodProxies = []
             for p in p_obj['good']:
                 if (p['good']['proxy'] == bestProx):
@@ -285,15 +282,15 @@ def process_image_worker():
         
         images.processed += 1
         image = Image.open(fname)
-        text = tess.image_to_string(image)
+        text  = tess.image_to_string(image)
 
         if len(text):
             job["text"] = text
 
-        imag = face_recognition.load_image_file(fname)
+        imag           = face_recognition.load_image_file(fname)
         face_locations = face_recognition.face_locations(imag)
 
-        faces_found = []
+        faces_found    = []
 
         for face in face_locations:
 
@@ -313,8 +310,6 @@ def process_image_worker():
         
         job['faces'] = faces_found
 
-        
-        
         if len(faces_found):
             T_LOCK.acquire()
             with open("data/faces.json", "a") as f:
@@ -354,16 +349,16 @@ def request_worker():
         "upgrade-insecure-requests": "1", 
         "user-agent": UA
     }
-        
+        bestProx = getBestProxy()['proxy']
         try:
-            r = get(url, headers=headers, proxies=getBestProxy()['proxy'])
+            r = get(url, headers=headers, proxies=bestProx)
         except:
             continue    
 
         if not r.ok:
 
             if (r.status_code == 403):
-                print("Your IP address has been banned by prnt.sc!")
+                print("%s has been banned by prnt.sc!" % bestProx['http'])
                 continue
 
             print({"status_code": r.status_code, "url": url})
@@ -398,8 +393,6 @@ if __name__ == "__main__":
     proxThread = threading.Thread(target=prox)
     proxThread.start()
     #proxThread.join()
-
-    print("[*i*] PROXY TESTING COMPLETED!")
 
     for i in range(config.process_threads):
         t = threading.Thread(target=process_image_worker)

@@ -1,79 +1,197 @@
-from numpy.lib.type_check import imag
 from requests import get
 from string import ascii_lowercase
 from random import choice
-from time import sleep, thread_time, time
 from user_agent import generate_navigator
 import pytesseract as tess
 tess.pytesseract.tesseract_cmd = "C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
 from PIL import Image
-from os import remove
+from os import remove, getcwd
 import threading
-from json import dumps
+from json import dump, dumps, loads
 import face_recognition
+from datetime import datetime
+from time import sleep
+
+oof_backup = """{
+    "good": [],
+    "bad": [],
+    "banned": []
+}
+"""
 
 class images:
-    found     = []
-    processed = 0
-    success   = 0
+    found            = []
+    processed        = 0
+    success          = 0
 
-process_lock = threading.Lock()    
-request_lock = threading.Lock()  
+class config:
+    process_threads  = 10
+    request_threads  = round(process_threads / 4)
 
-process_thread_count = 10 # BE CAREFUL // 25 threads will cause denial of service and your ip will be banned within seconds.
-request_thread_count = round(process_thread_count / 4)
+class proxies:
+    good             = []
+    fresh_list       = []
+    proxies          = {}
 
-proxies      = []
-currentProxy = None
+T_LOCK               = threading.Lock()   
 
-def updateProxies():
+
+class Proxies(object):
+    def __init__(self) -> None:
+        super().__init__()
+
+        self.proxy_buffer = {}
+
+        self.proxy_file = getcwd() + "/data/proxies.json"
+
+    def get(self):
+        T_LOCK.acquire()
+        x = open(self.proxy_file)
+        t = x.read()
+        x.close()
+        T_LOCK.release()    
+        try:
+            return loads(t)
+        except:
+            with open(self.proxy_file, 'w+') as f:
+                f.write(oof_backup)
+                print("%s was not JSON parsable! File re-formatted, please restart...")
+                exit(1)
+
+    def set(self, object):
+        T_LOCK.acquire()
+        with open(self.proxy_file, 'w+') as f:
+            dump(object, f, indent=4)       
+        T_LOCK.release()
+
+# proxies.proxies = new Proxies();
+proxies.proxies = Proxies()             
+
+def proxyTestWorker():
+    
+    while True:
+
+        proxy        = ""
+
+        if (len(proxies.fresh_list)):
+            proxy    = proxies.fresh_list.pop(0)
+        else:
+            continue
+    
+        address      = proxy.split(":")[0]
+        port         = int(proxy.split(":")[1])
+
+        proxified    = {
+            'http':  f'http://{address}:{port}',
+            'https': f'http://{address}:{port}'
+        }
+
+        abort = False
+
+        obj = proxies.proxies.get()
+            
+        for bad_prox in obj['bad']:
+            if (bad_prox['string'] == proxy):
+                abort = True
+                break
+
+        for banned_prox in obj['banned']:
+            if (banned_prox['string'] == proxy):      
+                abort = True
+                break     
+
+        if not abort:
+
+            try:
+
+                r        = get("http://prnt.sc", proxies = proxified, timeout=4.9)
+                time_    = r.elapsed.microseconds / 1000
+
+                if r.status_code == 403:
+
+                    p_obj = proxies.proxies.get()
+                    p_obj.banned.append({"ban_time": str(datetime.now()), "proxy": proxified, "string": proxy})
+                    proxies.proxies.set(p_obj)
+                    print("[BANNED PROXY: %s]" % proxy)
+                    continue   
+
+            except:
+
+                p_obj = proxies.proxies.get()
+                p_obj['bad'].append({"test_time": str(datetime.now()), "proxy": proxified, "string": proxy})
+                proxies.proxies.set(p_obj)
+                print("[BAD PROXY: %s]" % proxy)
+                continue
+
+            p_obj = proxies.proxies.get()
+            p_obj['good'].append({"test_time": str(datetime.now()), "elapsed_time": time_, "proxy": proxified, "string": proxy, "status_code": r.status_code})
+            proxies.proxies.set(p_obj)
+            print("[GOOD PROXY: %s ELAPSED: %s]" % (proxy, time_,))
+
+#            T_LOCK.acquire()
+#            print(proxies.proxies.get())
+#            T_LOCK.release()
+
+def testProxies():
+
+    print("Requesting proxies:")
+
     r = get(
         "https://api.proxyscrape.com" \
         "/v2/" \
         "?request=getproxies" \
         "&protocol=http" \
-        "&timeout=500" \
+        "&timeout=4999" \
         "&country=all" \
         "&ssl=yes" \
         "&anonymity=all" \
-        "&simplified=true"
-        )
+        "&simplified=true",
+        timeout=5
+    )
     
     if (r.ok):
-        lines = r.text.splitlines()
-        print(f"[UPDATED PROXIES] Found {len(lines)} Proxies!")
+        proxies.fresh_list = r.text.splitlines()
+        print("[api.proxyscrape.com] [Status %s] [Proxies Found: %s]" % (r.status_code, len(proxies.fresh_list),))
+    else:
+        print("[api.proxyscrape.com] [Status: %s]" % (r.status_code))
+        exit(1)
 
-        for line in lines:
+    threads      = []
 
-            address    = line.split(":")[0]
-            port       = int(line.split(":")[1])
+    for _ in range(10):
+        threads.append(threading.Thread(target=proxyTestWorker))
 
-            proxified  = {
-                'http':  f'http://{address}:{port}',
-                'https': f'http://{address}:{port}'
-            }
+    for i in range(10):
+        threads[i].start()  
 
-            try:
-                r      = get("http://prnt.sc", proxies = proxified, timeout=1.1)
-                time_  = r.elapsed.microseconds / 1000
-                if r.status_code == 403:
-                    print(f"[PROXY TEST]: {address}:{port} is BANNED by prnt.sc!")
-                    continue     
-            except:
-                print(f"[PROXY TEST]: {address}:{port} is DEAD!")
-                continue
+    for i in range(10):
+        threads[i].join()  
 
-            proxies.append({"time": time_, "proxy": proxified})
-            print(f"[PROXY TEST]: {address}:{port} is WORKING @ {time_}ms!")
-
-        print(proxies)    
+    sleep(30)    
 
 def getBestProxy():
-    fastestProxy = min([proxy['time'] for proxy in proxies])
-    for proxy in proxies:
-        if proxy['time'] == fastestProxy:
-            return proxy
-    return None
+    tries = 0
+    while True:
+        if (tries == 100):
+            print("Failed to find any good proxies!!!")
+            exit(1)
+        if (not len(proxies.proxies.get()['good'])):
+            tries += 1
+            sleep(.5)
+            print("WATING FOR GOOD PROXY...")
+            continue
+    
+        proxy_list = proxies.proxies.get()['good']
+
+        print("GETTING BEST PROX:")
+        print(proxy_list)
+
+        fastestProxy = min([proxy['elapsed_time'] for proxy in proxy_list])
+        
+        for proxy in proxy_list:
+            if proxy['elapsed_time'] == fastestProxy:
+                return proxy
+    
 
 alpha = list(ascii_lowercase) + [str(i) for i in range(10)]
 
@@ -83,18 +201,18 @@ def makeToken(size):
         buffer += choice(alpha)
     return buffer    
 
-def process_image_daemon():
+def process_image_worker():
     
     while True:
 
-        if len(images.found) == 0:
+        if not len(images.found):
             continue
 
-        job = images.found.pop(0)
+        job   = images.found.pop(0)
 
-        fname = "images/" + job['token'] + ".png"
+        fname = "images/%s.png" % job['token']
 
-        UA = generate_navigator()["user_agent"]
+        UA    = generate_navigator()["user_agent"]
 
         headers = {
             "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9", 
@@ -113,10 +231,32 @@ def process_image_daemon():
             "upgrade-insecure-requests": "1", 
             "user-agent": UA
         }
-        
-        re = get(job['url'], stream=True, allow_redirects=True, headers=headers)
+
+        bestProx = getBestProxy()['proxy']
+        print("[IMAGE PROCCESSING] Starting Image: %s" % fname)
+
+        try:
+            re = get(job['url'], stream=True, allow_redirects=True, headers=headers, proxies=bestProx, timeout=4.9)
+        except:
+            print("[Image Proccessing] Worker Request Timed Out! [Proxy: %s]" % bestProx['http'])
+            continue
+
+        if re.status_code == 403:
+
+            p_obj = proxies.proxies.proxies.get()
+            nuGoodProxies = []
+            for p in p_obj['good']:
+                if (p['good']['proxy'] == bestProx):
+                    p_obj.banned.append({"ban_time": str(datetime.now()), "proxy": bestProx, "string": bestProx['http']})
+                else:
+                    nuGoodProxies.append(p)    
+            p_obj['good'] = nuGoodProxies    
+            proxies.proxies.set(p_obj)    
+            print("[Image Proccessing] Worker Request Got [Proxy: %s] Banned! [Image: %s] [Code: %s] " % ( bestProx['http'], fname, re.status_code,))
+            continue
 
         if not re.ok:
+            print("[Image Proccessing] Worker Request Bad Respone Status Code! [Image: %s] [Code: %s] [Proxy: %s]" % (fname, re.status_code, bestProx['http'],))
             continue
 
         with open(fname, 'wb') as handle:
@@ -148,10 +288,8 @@ def process_image_daemon():
         if len(text):
             job["text"] = text
 
-
         imag = face_recognition.load_image_file(fname)
         face_locations = face_recognition.face_locations(imag)
-        # Improting Image class from PIL module 
 
         faces_found = []
 
@@ -173,23 +311,24 @@ def process_image_daemon():
         
         job['faces'] = faces_found
 
-        process_lock.acquire()
+        
         
         if len(faces_found):
-            with open("data/faces.json", "a") as f:
-                f.write(dumps(job) + "\n")
+            with T_LOCK.acquire():
+                with open("data/faces.json", "a") as f:
+                    f.write(dumps(job) + "\n")
 
         if len(text):
-            with open("data/text.json", "a") as f:
-                f.write(dumps(job) + "\n")
-
-        process_lock.release()        
+            with T_LOCK.acquire():
+                with open("data/text.json", "a") as f:
+                    f.write(dumps(job) + "\n")      
 
         remove(fname)
+        print("[Image Proccessing] Worker Request Bad Respone Status Code! [Image: %s] [Code: %s] [Proxy: %s]" % (fname, re.status_code, bestProx['http'],))
         images.success += 1
 
 
-def request_daemon():
+def request_worker():
     while 1:
         UA = generate_navigator()["user_agent"]
         token = makeToken(6)
@@ -212,42 +351,53 @@ def request_daemon():
         "user-agent": UA
     }
         
-        r = get(url, headers=headers)
+        r = get(url, headers=headers, proxies=getBestProxy()['proxy'])
 
         if not r.ok:
+
             if (r.status_code == 403):
                 print("Your IP address has been banned by prnt.sc!")
+
             print({"status_code": r.status_code, "url": url})
+
             continue
         
         try:
+            # BYPASS ANTI BOT MEASURES BY SIMPLY JUST GRABGING THE IMAGE FROM THE STATIC HTML HEAD INSTEAD OF RELYING ON A VALID BODY LOAD + XHR
             imgUrl = r.text.split("<meta property=\"og:image\" content=\"")[1].split("\"")[0]
         except Exception as f:
-            #print("[:(] -> " + str(f))
             continue
 
         if "st." in imgUrl:
             continue
-        #                                               THREADS        TRAY COUNT         PROCESSED COUNT                IMG URL
-        print("[Threads: %s Tray Count: %s Proccessed: %s ] -> %s" % (process_thread_count, len(images.found), images.processed, imgUrl,))
+        #                                                             PROC. THREADS           TRAY COUNT         PROCESSED COUNT   IMG URL
+        print("[Threads: %s Tray Count: %s Proccessed: %s ] -> %s" % (config.process_threads, len(images.found), images.processed, imgUrl,))
 
         images.found.append({"token": token, "url": imgUrl})        
 
+
 if __name__ == "__main__":
 
-    #UPDATE PROXY LIST
-    updateProxies()
+    def prox():
+        while True:
+            testProxies()
 
-    for i in range(process_thread_count):
-        print("Started thread #%s" % (i+1,))
-        t = threading.Thread(target=process_image_daemon)
+    proxThread = threading.Thread(target=prox)
+    proxThread.start()
+
+    print("[*i*] Started Proxy Thread")
+
+    for i in range(config.process_threads):
+        t = threading.Thread(target=process_image_worker)
         t.start()
+    
+    print("[*i*] Started %s Image Proccessing Threads" % config.process_threads)
 
-    for i in range(request_thread_count):
-        t = threading.Thread(target=request_daemon)
+    for i in range(config.request_threads):
+        t = threading.Thread(target=request_worker)
         t.start()    
 
-
+    print("[*i*] Started %s HTTP Request Threads" % config.process_threads)
 
 
 

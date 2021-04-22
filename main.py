@@ -32,6 +32,7 @@ class proxies:
     good             = []
     fresh_list       = []
     proxies          = {}
+    T_INDEX          = 0
 
 T_LOCK               = threading.Lock()   
 
@@ -102,6 +103,8 @@ def proxyTestWorker():
 
         if not abort:
 
+            proxies.T_INDEX += 1
+
             try:
 
                 r        = get("http://prnt.sc", proxies = proxified, timeout=4.9)
@@ -112,7 +115,7 @@ def proxyTestWorker():
                     p_obj = proxies.proxies.get()
                     p_obj.banned.append({"ban_time": str(datetime.now()), "proxy": proxified, "string": proxy})
                     proxies.proxies.set(p_obj)
-                    print("[BANNED PROXY: %s]" % proxy)
+                    print("[BANNED PROXY: %s INDEX: %s / %s]" % (proxy, proxies.T_INDEX, len(proxies.fresh_list)))
                     continue   
 
             except:
@@ -120,19 +123,20 @@ def proxyTestWorker():
                 p_obj = proxies.proxies.get()
                 p_obj['bad'].append({"test_time": str(datetime.now()), "proxy": proxified, "string": proxy})
                 proxies.proxies.set(p_obj)
-                print("[BAD PROXY: %s]" % proxy)
+                print("[BAD PROXY: %s INDEX: %s / %s]" % (proxy, proxies.T_INDEX, len(proxies.fresh_list)))
                 continue
 
             p_obj = proxies.proxies.get()
             p_obj['good'].append({"test_time": str(datetime.now()), "elapsed_time": time_, "proxy": proxified, "string": proxy, "status_code": r.status_code})
             proxies.proxies.set(p_obj)
-            print("[GOOD PROXY: %s ELAPSED: %s]" % (proxy, time_,))
+            print("[GOOD PROXY: %s ELAPSED: %s INDEX: %s / %s]" % (proxy, time_, proxies.T_INDEX, len(proxies.fresh_list)))
+
 
 #            T_LOCK.acquire()
 #            print(proxies.proxies.get())
 #            T_LOCK.release()
 
-def testProxies():
+def updateProxies():
 
     print("Requesting proxies:")
 
@@ -164,10 +168,8 @@ def testProxies():
     for i in range(10):
         threads[i].start()  
 
-    for i in range(10):
-        threads[i].join()  
-
-    sleep(30)    
+#    for i in range(10):
+#        threads[i].join()      
 
 def getBestProxy():
     tries = 0
@@ -314,14 +316,16 @@ def process_image_worker():
         
         
         if len(faces_found):
-            with T_LOCK.acquire():
-                with open("data/faces.json", "a") as f:
-                    f.write(dumps(job) + "\n")
+            T_LOCK.acquire()
+            with open("data/faces.json", "a") as f:
+                f.write(dumps(job) + "\n")
+            T_LOCK.release()
 
         if len(text):
-            with T_LOCK.acquire():
-                with open("data/text.json", "a") as f:
-                    f.write(dumps(job) + "\n")      
+            T_LOCK.acquire()
+            with open("data/text.json", "a") as f:
+                f.write(dumps(job) + "\n")   
+            T_LOCK.release()   
 
         remove(fname)
         print("[Image Proccessing] Worker Request Bad Respone Status Code! [Image: %s] [Code: %s] [Proxy: %s]" % (fname, re.status_code, bestProx['http'],))
@@ -351,15 +355,18 @@ def request_worker():
         "user-agent": UA
     }
         
-        r = get(url, headers=headers, proxies=getBestProxy()['proxy'])
+        try:
+            r = get(url, headers=headers, proxies=getBestProxy()['proxy'])
+        except:
+            continue    
 
         if not r.ok:
 
             if (r.status_code == 403):
                 print("Your IP address has been banned by prnt.sc!")
+                continue
 
             print({"status_code": r.status_code, "url": url})
-
             continue
         
         try:
@@ -378,14 +385,21 @@ def request_worker():
 
 if __name__ == "__main__":
 
+    # INITIALLY REQUEST AND SORT PROXIES
+    updateProxies()
+
+    # UPDATES PROXIES IN BACKGROUND
     def prox():
         while True:
-            testProxies()
+            sleep(60 * 10)
+            updateProxies()
 
+    print("[*i*] STARTING PROXY TESTING, THIS WILL TAKE A MOMENT...")
     proxThread = threading.Thread(target=prox)
     proxThread.start()
+    #proxThread.join()
 
-    print("[*i*] Started Proxy Thread")
+    print("[*i*] PROXY TESTING COMPLETED!")
 
     for i in range(config.process_threads):
         t = threading.Thread(target=process_image_worker)

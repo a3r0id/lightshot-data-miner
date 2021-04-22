@@ -16,6 +16,7 @@ def parse(file, string):
         except:
             continue
 
+        # IGNORE THE BITCOIN GARBAGE - PROBABLY AT LEAST 1/12th OF THE ENITRE RESULTS
         if string in parsed["text"] and "@bit" not in parsed["text"]:
             print(parsed)   
             print()

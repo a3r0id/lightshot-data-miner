@@ -26,7 +26,7 @@ class images:
     success          = 0
 
 class config:
-    process_threads  = 4
+    process_threads  = 8
     request_threads  = round(process_threads / 4)
 
 class proxies:

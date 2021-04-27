@@ -21,5 +21,5 @@ def parse(file, string):
             print(parsed)   
             print()
          
-# SIMPLE TOOL TO SEARCH FOR TEXT IN ANY JSON FILE       
+# SIMPLE TOOL TO SEARCH FOR TEXT IN THE RESULT FILE/S       
 #parse("data/text.json", "looking for this string!")

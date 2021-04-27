@@ -18,6 +18,7 @@ oof_backup = """{
 }
 """
 
+# CHANGE TO PATH TO YOUR TESSERACT BINARY
 tess.pytesseract.tesseract_cmd = "C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
 
 class images:
@@ -56,7 +57,7 @@ class Proxies(object):
         except:
             with open(self.proxy_file, 'w+') as f:
                 f.write(oof_backup)
-                print("%s was not JSON parsable! File re-formatted, please restart...")
+                print("%s was not JSON parsable! File re-formatted, please restart..." % self.proxy_file)
                 exit(1)
 
     def set(self, object):

@@ -4,6 +4,8 @@ from os import getcwd
 
 imLocation = getcwd() + "\\tests\\test.jpg"
 
+resultLocation = getcwd() + "\\tests\\faces\\"
+
 image = face_recognition.load_image_file(imLocation)
 face_locations = face_recognition.face_locations(image)
 face_landmarks = face_recognition.face_landmarks(image)
@@ -27,10 +29,10 @@ for face in face_locations:
 
     # crop (left, top, right, bottom)
     # face (top, right, bottom, left)
-    imageBuffer = im.crop((face[3], face[0], face[1], face[2])) 
-    imageBuffer.show()
+    imageBuffer = im.crop((face[3], face[0], face[1], face[2]))
+    imageBuffer.save("%s%s.png" % (resultLocation, str(index),)) 
+    
+    #imageBuffer.show()
     #im.show()
 
     index += 1
-
-    #exit()
